@@ -354,6 +354,14 @@ Quelques questions pour continuer l'exploration :
 
 ---
 
+## Et ensuite ?
+
+Le projet proprement dit est décrit dans [SCENARIO.md](SCENARIO.md) :
+téléchargement des statistiques individuelles avec `nba_api`, puis construction
+et comparaison de trois modèles de performance offensive.
+
+---
+
 ## En cas de problème
 
 | Symptôme | Solution |
