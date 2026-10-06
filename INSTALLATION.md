@@ -1,7 +1,7 @@
-# Projet d'analyse NBA — Installation et téléchargement des données
+# Projet d'analyse NBA — Installation et premiers pas
 
-Ce guide vous permet de préparer votre environnement de travail et de télécharger
-le jeu de données NBA utilisé pendant le projet.
+Ce guide vous permet de préparer votre environnement de travail, de télécharger
+le jeu de données NBA utilisé pendant le projet, puis de l'explorer avec pandas.
 
 Comptez environ 15 minutes, et prévoyez **au moins 6 Go d'espace disque libre**
 (archive de 700 Mo + 4,3 Go une fois décompressée).
@@ -173,6 +173,184 @@ Résultat attendu :
 ```
 
 Si vous obtenez ce résultat, vous êtes prêts pour la suite ! 🏀
+
+---
+
+## 8. Explorer les données avec pandas
+
+Maintenant que les données sont là, prenons-en connaissance. Créez un fichier
+`exploration.py` à la racine du projet, ajoutez-y les blocs de code ci-dessous
+au fur et à mesure, et lancez-le avec :
+
+```bash
+python exploration.py
+```
+
+### 8.1 Se connecter à la base et lister les tables
+
+```python
+import sqlite3
+import pandas as pd
+
+con = sqlite3.connect("data/basketball/nba.sqlite")
+
+tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type = 'table'", con)
+print(tables)
+```
+
+`pd.read_sql` exécute une requête SQL et renvoie le résultat sous forme de
+**DataFrame**, le tableau de pandas.
+
+### 8.2 Charger les matchs de saison régulière
+
+```python
+matchs = pd.read_sql("SELECT * FROM game WHERE season_type = 'Regular Season'", con)
+
+print(matchs.shape)   # (nombre de lignes, nombre de colonnes)
+print(matchs[["game_date", "team_name_home", "pts_home", "team_name_away", "pts_away", "wl_home"]].head())
+```
+
+```
+(60192, 55)
+             game_date           team_name_home  ...  pts_away wl_home
+0  1946-11-01 00:00:00          Toronto Huskies  ...      68.0       L
+1  1946-11-02 00:00:00        St. Louis Bombers  ...      51.0       W
+...
+```
+
+Chaque ligne est un match. Les colonnes vont par paires : `_home` pour l'équipe
+qui reçoit, `_away` pour l'équipe qui se déplace (`pts` = points, `reb` = rebonds,
+`ast` = passes décisives, `fg3a` = tirs à 3 points tentés, etc.).
+
+> La table `game` contient aussi les matchs de présaison, de playoffs et les
+> All-Star Games (colonne `season_type`). On les exclut ici pour comparer ce qui
+> est comparable.
+
+### 8.3 Premier coup d'œil : types, statistiques, valeurs manquantes
+
+```python
+matchs.info(verbose=False)                      # types de colonnes, mémoire utilisée
+print(matchs[["pts_home", "pts_away", "fg3a_home", "reb_home", "ast_home"]].describe().round(1))
+print(matchs.isna().sum().sort_values(ascending=False).head())   # colonnes les plus incomplètes
+```
+
+```
+       pts_home  pts_away  fg3a_home  reb_home  ast_home
+count   60192.0   60192.0    42668.0   45388.0   45323.0
+mean      104.8     101.2       17.5      43.8      24.1
+...
+```
+
+**À observer :**
+- `count` n'est pas le même partout : les points sont connus pour tous les matchs,
+  mais les rebonds, passes ou tirs à 3 points **manquent pour les matchs anciens**
+  (ces statistiques n'étaient pas encore relevées). Pensez-y avant de comparer
+  des époques.
+- Le `min` de `reb_home` vaut 0 : un match sans aucun rebond est impossible, c'est
+  une donnée manquante codée en 0. Méfiez-vous des valeurs extrêmes.
+
+### 8.4 L'avantage du terrain existe-t-il ?
+
+```python
+print(matchs["wl_home"].value_counts(normalize=True).round(3))
+```
+
+```
+wl_home
+W    0.618
+L    0.382
+```
+
+Sur toute l'histoire de la NBA, l'équipe qui reçoit gagne **près de 62 %** des matchs.
+
+### 8.5 Évolution par saison : la révolution du tir à 3 points
+
+La colonne `season_id` encode le type de saison et l'année : `22022` signifie
+saison régulière (`2`) 2022-23 (`2022`). On extrait l'année, puis on regroupe
+avec `groupby` :
+
+```python
+matchs["saison"] = matchs["season_id"].str[1:].astype(int)
+
+par_saison = matchs.groupby("saison").agg(
+    nb_matchs=("game_id", "count"),
+    points_dom=("pts_home", "mean"),
+    tirs_3pts_dom=("fg3a_home", "mean"),
+).round(1)
+
+print(par_saison.loc[[1980, 1990, 2000, 2010, 2022]])
+```
+
+```
+        nb_matchs  points_dom  tirs_3pts_dom
+saison
+1980          943       110.0            NaN
+1990         1107       108.7            7.0
+2000         1189        96.3           13.7
+2010         1230       101.1           18.1
+2022         1230       115.9           34.4
+```
+
+Le nombre de tirs à 3 points tentés par match a été **multiplié par 5 en 30 ans**.
+(`NaN` = donnée non disponible pour cette saison.) On voit aussi que les points
+marqués ont baissé entre 1990 et 2000 avant de remonter.
+
+### 8.6 Les grosses tables : filtrer avant de charger
+
+La table `play_by_play` compte **13,6 millions de lignes** : ne la chargez jamais
+en entier avec `SELECT *`. Filtrez toujours avec `WHERE` (ou `LIMIT`).
+Exemple : le match 7 des finales 2016, Warriors contre Cavaliers.
+
+```python
+finale = pd.read_sql("SELECT * FROM play_by_play WHERE game_id = '0041500407'", con)
+print(finale.shape)
+
+paniers = finale.dropna(subset=["score"])
+print(paniers[["period", "pctimestring", "homedescription", "visitordescription", "score"]].tail(4))
+```
+
+```
+(442, 34)
+     period pctimestring                                   homedescription                        visitordescription    score
+390       4         4:39  Thompson 2' Driving Layup (14 PTS) (Green 9 AST)                                       NaN  89 - 89
+421       4         0:53                                               NaN  Irving 25' 3PT Pullup Jump Shot (26 PTS)  92 - 89
+432       4         0:10                                               NaN          James Free Throw 2 of 2 (27 PTS)  93 - 89
+...
+```
+
+On retrouve le tir à 3 points décisif de Kyrie Irving à 53 secondes de la fin.
+
+> Le play-by-play ne couvre pas tous les matchs : il commence à la saison
+> 1996-97 (environ 30 000 matchs) et ne contient pas les finales 2023.
+
+### 8.7 Alternative : lire les fichiers CSV
+
+Les mêmes tables existent en CSV. C'est pratique pour les petites tables :
+
+```python
+joueurs = pd.read_csv("data/basketball/csv/player.csv")
+print(joueurs.shape)        # (4831, 5)
+print(joueurs.head())
+```
+
+Pour les grosses tables (`play_by_play.csv` fait plus de 2 Go), préférez la base
+SQLite, qui permet de filtrer **avant** de charger en mémoire.
+
+### 8.8 Fermer la connexion
+
+```python
+con.close()
+```
+
+### À vous de jouer
+
+Quelques questions pour continuer l'exploration :
+
+1. Quelle équipe a le meilleur pourcentage de victoires à domicile depuis 2000 ?
+2. Le nombre moyen de points par match a-t-il toujours augmenté ? Repérez les
+   périodes de baisse.
+3. L'avantage du terrain est-il plus fort en playoffs qu'en saison régulière ?
+4. Quel est le match avec le plus grand écart de points de l'histoire ?
 
 ---
 
