@@ -8,6 +8,78 @@ Comptez environ 15 minutes, et prévoyez **au moins 6 Go d'espace disque libre**
 
 ---
 
+## Préambule : deux fichiers à connaître
+
+Le projet contient, en plus du code, deux petits fichiers de configuration que
+l'on retrouve dans presque tous les projets Python. Ils ne contiennent pas
+d'analyse, mais ils rendent le projet **reproductible** et **propre**.
+
+### `requirements.txt` : la liste des bibliothèques
+
+Un programme Python s'appuie sur des bibliothèques externes (ici `pandas`,
+`kaggle`, `nba_api`). Le fichier `requirements.txt` les liste, **avec leur version
+exacte** :
+
+```
+kaggle==2.2.4
+nba_api==1.11.4
+pandas==3.0.6
+```
+
+**Pourquoi ?**
+
+- **Installer en une commande.** `pip install -r requirements.txt` installe toutes
+  les bibliothèques d'un coup, sans avoir à les connaître.
+- **Avoir tous la même version.** Une bibliothèque évolue : une fonction peut
+  changer de comportement ou disparaître d'une version à l'autre. Si chacun
+  installe « la dernière version » à une date différente, le même code peut
+  fonctionner chez l'un et planter chez l'autre. Le `==` fige la version.
+- **Documenter le projet.** En ouvrant ce fichier, on sait immédiatement de quoi
+  le projet a besoin.
+
+Si vous ajoutez une bibliothèque au projet (par exemple `matplotlib` pour les
+graphiques), installez-la puis ajoutez-la au fichier avec sa version :
+
+```bash
+pip install matplotlib
+pip freeze | grep -i matplotlib >> requirements.txt
+```
+
+> Sous Windows (PowerShell), remplacez `grep -i` par `Select-String`.
+
+### `.gitignore` : ce que git doit ignorer
+
+Git enregistre l'historique des fichiers du projet. Mais certains fichiers ne
+doivent **pas** être enregistrés ni partagés. Le fichier `.gitignore` les liste :
+
+```
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+data/
+```
+
+| Ligne | Ce qui est ignoré | Pourquoi |
+|---|---|---|
+| `.venv/` | l'environnement virtuel | il pèse environ 150 Mo, dépend de votre système, et chacun peut le recréer avec `requirements.txt` |
+| `__pycache__/` | les fichiers compilés par Python | générés automatiquement, inutiles à partager |
+| `.ipynb_checkpoints/` | les sauvegardes automatiques de Jupyter | générées automatiquement |
+| `data/` | les données téléchargées | plusieurs Go, trop lourd pour git, et chacun peut les retélécharger avec les commandes de ce guide |
+
+**Le principe :** on partage la **recette** (le code, `requirements.txt`, les
+instructions de téléchargement), pas les **résultats** que chacun peut recréer
+(l'environnement, les données).
+
+> ⚠️ Un fichier ignoré n'est jamais envoyé sur GitHub. C'est aussi une protection :
+> ne mettez **jamais** de mot de passe ou de token dans un fichier suivi par git.
+> Votre token Kaggle, lui, est rangé hors du projet (`~/.kaggle/`), il n'y a donc
+> aucun risque de le publier par erreur.
+
+Le nom commence par un point : sur macOS et Linux, ce fichier est **caché**.
+Utilisez `ls -a` pour le voir dans le terminal.
+
+---
+
 ## 1. Prérequis
 
 - **Python 3** installé (le projet a été testé avec Python 3.14).
